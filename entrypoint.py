@@ -7,6 +7,8 @@ import requests
 # We are define the two constants
 HISTORY_ENGTH = 10
 DATA_KEY = "engine_temperature"
+DATA_KEY1 = "current_engine_temperature"
+DATA_KEY2 = "average_engine_temperature"
 
 # We are creating a Flask server, and allow us to interact with it usinfg the app variable
 app = Flask(__name__)
@@ -14,7 +16,7 @@ app = Flask(__name__)
 # We are define an endpoint which accepts POST requests, and is reachable from the /record endpoint
 @app.route('/record', methods=['POST'])
 def record_engine_temperature():
-    # every time the /record endpoint is called, the code in this blok is executed
+    # every time the /record endpoint is called, the code in this block is executed
     payload = requests.get_json(force=True)
     logger.info(f"(*) record request -- {json.dumps(payload)} (*)")
     
@@ -33,10 +35,38 @@ def record_engine_temperature():
     
     logger.info(f"record request successful")
     return {"success": True}, 200
-    # return a json payload, and a 200 status code to the client
-    return {"success": True}, 200
 
 # We are pratically identical to the above
-@app.route('/collect', methods=['POST'])
+@app.route('/collect', methods=['GET'])
 def collect_engine_temperature():
-    return {"success": True}, 200
+    # every time the /record endpoint is called, the code in this block is executed
+    payload = requests.get_json(force=True)
+    logger.info(f"(*) collect request -- {json.dumps(payload)} (*)")
+    
+    database = redis.Redis(host="redis", port=6379, db=0, decode_responses=True)
+    
+    current_engine_temperature_values = database.lrange(DATA_KEY1, 0, HISTORY_ENGTH - 1)
+    current_engine_temperature_values = list(map(float, current_engine_temperature_values))
+    
+    if current_engine_temperature_values:
+        current_engine_temperature = current_engine_temperature_values[0]
+    else:
+        current_engine_temperature = None
+        
+    logger.info(f"Engine's current temperature to collect is: {current_engine_temperature}")
+
+    # We are fetch average engine temperature
+    average_engine_temperature_values = database.lrange(DATA_KEY2, 0, HISTORY_ENGTH - 1)
+    average_engine_temperature_values = list(map(float, average_engine_temperature_values))
+    
+    if average_engine_temperature_values:
+        average_engine_temperature = sum(average_engine_temperature_values) / len(average_engine_temperature_values)
+    else:
+        average_engine_temperature = None
+        
+    logger.info(f"Engine's average temperature to collect is: {average_engine_temperature}")
+    
+    logger.info("collect request successful")
+    
+    return{"current_engine_temperature": current_engine_temperature,
+           "average_engine_temperature": average_engine_temperature},200
